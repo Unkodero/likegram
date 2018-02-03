@@ -73,7 +73,7 @@ func main() {
 		time.Sleep(time.Second * 3)
 	}
 
-	success.Println("Started ", threads, " thread(s)")
+	success.Println("Started", threads, "thread(s)")
 	wg.Wait() // Hachiko
 }
 
@@ -146,7 +146,7 @@ func getLastPhotoID() () {
 
 		// How much likes we have
 		likes, _ := jsonparser.GetInt(profile, "entry_data", "ProfilePage", "[0]", "user", "media", "nodes", "[0]", "likes", "count")
-		success.Println("Now photo have ", likes, " likes")
+		success.Println("Now photo have", likes, "likes")
 
 		// Some sleep and recursion
 		time.Sleep(time.Second * time.Duration(accountDelay))
@@ -200,7 +200,7 @@ func LikeThread(id int, wg *sync.WaitGroup) {
 		dialer, err := proxy.SOCKS5("tcp", getRandomProxy(), nil, proxy.Direct)
 		if err != nil {
 			// Invalid proxy
-			warning.Printf("Thread %d have a problem with proxy", id)
+			warning.Println("Thread", id, "have a problem with proxy")
 		} else {
 			// Proxy good, set transport to http client
 			httpTransport := &http.Transport{}
@@ -214,12 +214,12 @@ func LikeThread(id int, wg *sync.WaitGroup) {
 			req.Header.Add("Connection", "Keep-Alive")
 			req.Header.Add("Accept-Encoding", "gzip")
 			if err != nil {
-				warning.Println("Thread", id, " can`t create request")
+				warning.Println("Thread", id, "can`t create request")
 			}
 
 			resp, err := httpClient.Do(req)
 			if err != nil {
-				warning.Println("Thread", id, " can`t create request with current proxy in this interation")
+				warning.Println("Thread", id, "can`t create request with current proxy in this interation")
 			} else {
 				defer resp.Body.Close()
 			}
