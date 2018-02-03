@@ -24,11 +24,14 @@ var proxyKey string
 var proxyDelay int
 var accountLogin string
 var accountDelay int
+var accountLimit int
 var threads int
 var threadDelay int
 
 var photoID string
 var proxies [] string
+
+var inLimit bool
 
 func main() {
 	parseFlags() // Parse options
@@ -85,6 +88,7 @@ func parseFlags() {
 	flag.IntVar(&proxyDelay, "proxy_delay", 500, "Proxy update delay")
 	flag.StringVar(&accountLogin, "login", "", "Instagram account login")
 	flag.IntVar(&accountDelay, "delay", 600, "Instagram account update in seconds")
+	flag.IntVar(&accountLimit, "limit", 0, "Likes limit for media")
 	flag.IntVar(&threads, "threads", 2, "Threads count")
 	flag.IntVar(&threadDelay, "thread_delay", 15, "Thread delay")
 	flag.Parse()
@@ -133,20 +137,30 @@ func getLastPhotoID() () {
 
 		lastPhotoID := mediaID + "_" + profileID
 
+		// How much likes we have
+		likes, _ := jsonparser.GetInt(profile, "entry_data", "ProfilePage", "[0]", "user", "media", "nodes", "[0]", "likes", "count")
+
 		// First interation
 		if len(photoID) == 0 {
-			success.Println("Set photo to like")
+			success.Println("Set media to like")
 			photoID = lastPhotoID
 		}
 
 		if len(photoID) == 0 || photoID != lastPhotoID {
-			success.Println("Got a new photo")
+			success.Println("Got a new media")
 			photoID = lastPhotoID
 		}
 
-		// How much likes we have
-		likes, _ := jsonparser.GetInt(profile, "entry_data", "ProfilePage", "[0]", "user", "media", "nodes", "[0]", "likes", "count")
-		success.Println("Now photo have", likes, "likes")
+		if accountLimit == 0 || accountLimit != 0 && int(likes) < accountLimit {
+			// Echo current likes count
+			success.Println("Now photo have", likes, "likes")
+			inLimit = false
+		} else {
+			if !inLimit {
+				inLimit = true
+				warning.Println(likes, "/", accountLimit, "likes on media. Paused.")
+			}
+		}
 
 		// Some sleep and recursion
 		time.Sleep(time.Second * time.Duration(accountDelay))
@@ -158,28 +172,30 @@ Update proxy
  */
 func updateProxies() {
 	for true {
-		res, err := http.Get("http://api.good-proxies.ru/get.php?type[socks5]=on&count=0&ping=15000&key=" + proxyKey)
-		if err != nil {
-			panic(err)
-		}
-		proxyBodyBytes, err := ioutil.ReadAll(res.Body)
-		res.Body.Close()
-		if err != nil {
-			panic(err)
-		}
+		if !inLimit {
+			res, err := http.Get("http://api.good-proxies.ru/get.php?type[socks5]=on&count=0&ping=15000&key=" + proxyKey)
+			if err != nil {
+				panic(err)
+			}
+			proxyBodyBytes, err := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil {
+				panic(err)
+			}
 
-		match, _ := regexp.Match("Вы ввели неверный ключ.", proxyBodyBytes)
-		if match {
-			error.Println("Invalid proxy key")
-			os.Exit(-1)
+			match, _ := regexp.Match("Вы ввели неверный ключ.", proxyBodyBytes)
+			if match {
+				error.Println("Invalid proxy key")
+				os.Exit(-1)
+			}
+
+			// Format proxy list (plain text) to array
+			proxies = strings.Split(string(proxyBodyBytes), "\n")
+			info.Println("Loaded ", len(proxies), " proxies")
+
+			// Some sleep and recursion
+			time.Sleep(time.Second * time.Duration(proxyDelay))
 		}
-
-		// Format proxy list (plain text) to array
-		proxies = strings.Split(string(proxyBodyBytes), "\n")
-		info.Println("Loaded ", len(proxies), " proxies")
-
-		// Some sleep and recursion
-		time.Sleep(time.Second * time.Duration(proxyDelay))
 	}
 }
 
@@ -196,35 +212,37 @@ Main thread (makes request to secret server, with add you account to popularity 
  */
 func LikeThread(id int, wg *sync.WaitGroup) {
 	for true {
-		// Connect to proxy
-		dialer, err := proxy.SOCKS5("tcp", getRandomProxy(), nil, proxy.Direct)
-		if err != nil {
-			// Invalid proxy
-			warning.Println("Thread", id, "have a problem with proxy")
-		} else {
-			// Proxy good, set transport to http client
-			httpTransport := &http.Transport{}
-			httpClient := &http.Client{Transport: httpTransport}
-			httpTransport.Dial = dialer.Dial
-
-			req, err := http.NewRequest("GET", "http://194.58.115.48/add?lat=45.04280&lon=41.97340&id="+photoID, nil)
-			req.Header.Add("User-Agent", "mozilla")
-			req.Header.Add("Accept-Language", "en-US,en;q=0.5")
-			req.Header.Add("Host", "194.58.115.48")
-			req.Header.Add("Connection", "Keep-Alive")
-			req.Header.Add("Accept-Encoding", "gzip")
+		if !inLimit {
+			// Connect to proxy
+			dialer, err := proxy.SOCKS5("tcp", getRandomProxy(), nil, proxy.Direct)
 			if err != nil {
-				warning.Println("Thread", id, "can`t create request")
-			}
-
-			resp, err := httpClient.Do(req)
-			if err != nil {
-				warning.Println("Thread", id, "can`t create request with current proxy in this interation")
+				// Invalid proxy
+				warning.Println("Thread", id, "have a problem with proxy")
 			} else {
-				defer resp.Body.Close()
-			}
-		}
+				// Proxy good, set transport to http client
+				httpTransport := &http.Transport{}
+				httpClient := &http.Client{Transport: httpTransport}
+				httpTransport.Dial = dialer.Dial
 
-		time.Sleep(time.Second * time.Duration(threadDelay))
+				req, err := http.NewRequest("GET", "http://194.58.115.48/add?lat=45.04280&lon=41.97340&id="+photoID, nil)
+				req.Header.Add("User-Agent", "mozilla")
+				req.Header.Add("Accept-Language", "en-US,en;q=0.5")
+				req.Header.Add("Host", "194.58.115.48")
+				req.Header.Add("Connection", "Keep-Alive")
+				req.Header.Add("Accept-Encoding", "gzip")
+				if err != nil {
+					warning.Println("Thread", id, "can`t create request")
+				}
+
+				resp, err := httpClient.Do(req)
+				if err != nil {
+					warning.Println("Thread", id, "can`t create request with current proxy in this interation")
+				} else {
+					defer resp.Body.Close()
+				}
+			}
+
+			time.Sleep(time.Second * time.Duration(threadDelay))
+		}
 	}
 }
