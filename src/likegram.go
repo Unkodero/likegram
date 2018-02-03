@@ -1,18 +1,18 @@
 package main
 
 import (
-	"github.com/buger/jsonparser"
-	"golang.org/x/net/proxy"
-	"github.com/fatih/color"
 	"flag"
-	"net/http"
+	"github.com/buger/jsonparser"
+	"github.com/fatih/color"
+	"golang.org/x/net/proxy"
 	"io/ioutil"
-	"regexp"
-	"os"
-	"time"
-	"strings"
 	"math/rand"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
 	"sync"
+	"time"
 )
 
 var error *color.Color
@@ -24,14 +24,11 @@ var proxyKey string
 var proxyDelay int
 var accountLogin string
 var accountDelay int
-var accountLimit int
 var threads int
 var threadDelay int
 
 var photoID string
-var proxies [] string
-
-var inLimit bool
+var proxies []string
 
 func main() {
 	parseFlags() // Parse options
@@ -43,13 +40,13 @@ func main() {
 	warning = color.New(color.FgYellow, color.Bold)
 
 	// Check api key
-	if (len(proxyKey) != 32) {
+	if len(proxyKey) != 32 {
 		error.Println("Invalid proxy API key")
 		os.Exit(0)
 	}
 
 	// Check Instagram login (name?)
-	if (len(accountLogin) < 3) {
+	if len(accountLogin) < 3 {
 		error.Println("Invalid Instagram login")
 		os.Exit(0)
 	}
@@ -82,13 +79,12 @@ func main() {
 
 /**
 Parse options
- */
+*/
 func parseFlags() {
 	flag.StringVar(&proxyKey, "proxy", "", "good-proxies.ru API key")
 	flag.IntVar(&proxyDelay, "proxy_delay", 500, "Proxy update delay")
 	flag.StringVar(&accountLogin, "login", "", "Instagram account login")
 	flag.IntVar(&accountDelay, "delay", 600, "Instagram account update in seconds")
-	flag.IntVar(&accountLimit, "limit", 0, "Likes limit for media")
 	flag.IntVar(&threads, "threads", 2, "Threads count")
 	flag.IntVar(&threadDelay, "thread_delay", 15, "Thread delay")
 	flag.Parse()
@@ -96,8 +92,8 @@ func parseFlags() {
 
 /**
 Check account for valid and private. And get id of the last media
- */
-func getLastPhotoID() () {
+*/
+func getLastPhotoID() {
 	for true {
 		res, err := http.Get("https://www.instagram.com/" + accountLogin)
 		if err != nil {
@@ -120,7 +116,7 @@ func getLastPhotoID() () {
 			os.Exit(-1)
 		}
 
-		if (isPrivate) {
+		if isPrivate {
 			error.Println("Account is private")
 			os.Exit(-1)
 		}
@@ -151,57 +147,45 @@ func getLastPhotoID() () {
 			photoID = lastPhotoID
 		}
 
-		if accountLimit == 0 || accountLimit != 0 && int(likes) < accountLimit {
-			// Echo current likes count
-			success.Println("Now photo have", likes, "likes")
-			inLimit = false
-		} else {
-			if !inLimit {
-				inLimit = true
-				warning.Println(likes, "/", accountLimit, "likes on media. Paused.")
-			}
-		}
-
-		// Some sleep and recursion
+		success.Println("Now photo have", likes, "likes")
+		// Some sleep
 		time.Sleep(time.Second * time.Duration(accountDelay))
 	}
 }
 
 /**
 Update proxy
- */
+*/
 func updateProxies() {
 	for true {
-		if !inLimit {
-			res, err := http.Get("http://api.good-proxies.ru/get.php?type[socks5]=on&count=0&ping=15000&key=" + proxyKey)
-			if err != nil {
-				panic(err)
-			}
-			proxyBodyBytes, err := ioutil.ReadAll(res.Body)
-			res.Body.Close()
-			if err != nil {
-				panic(err)
-			}
-
-			match, _ := regexp.Match("Вы ввели неверный ключ.", proxyBodyBytes)
-			if match {
-				error.Println("Invalid proxy key")
-				os.Exit(-1)
-			}
-
-			// Format proxy list (plain text) to array
-			proxies = strings.Split(string(proxyBodyBytes), "\n")
-			info.Println("Loaded ", len(proxies), " proxies")
-
-			// Some sleep and recursion
-			time.Sleep(time.Second * time.Duration(proxyDelay))
+		res, err := http.Get("http://api.good-proxies.ru/get.php?type[socks5]=on&count=0&ping=15000&key=" + proxyKey)
+		if err != nil {
+			panic(err)
 		}
+		proxyBodyBytes, err := ioutil.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			panic(err)
+		}
+
+		match, _ := regexp.Match("Вы ввели неверный ключ.", proxyBodyBytes)
+		if match {
+			error.Println("Invalid proxy key")
+			os.Exit(-1)
+		}
+
+		// Format proxy list (plain text) to array
+		proxies = strings.Split(string(proxyBodyBytes), "\n")
+		info.Println("Loaded ", len(proxies), " proxies")
+
+		// Some sleep
+		time.Sleep(time.Second * time.Duration(proxyDelay))
 	}
 }
 
 /**
 Return`s maximum random proxy from a list of ~5k proxies
- */
+*/
 func getRandomProxy() (proxy string) {
 	proxy = proxies[rand.Intn(len(proxies))]
 	return
@@ -209,7 +193,7 @@ func getRandomProxy() (proxy string) {
 
 /**
 Main thread (makes request to secret server, with add you account to popularity list)
- */
+*/
 func LikeThread(id int, wg *sync.WaitGroup) {
 	for true {
 		if !inLimit {
