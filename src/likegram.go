@@ -196,37 +196,35 @@ Main thread (makes request to secret server, with add you account to popularity 
 */
 func LikeThread(id int, wg *sync.WaitGroup) {
 	for true {
-		if !inLimit {
-			// Connect to proxy
-			dialer, err := proxy.SOCKS5("tcp", getRandomProxy(), nil, proxy.Direct)
+		// Connect to proxy
+		dialer, err := proxy.SOCKS5("tcp", getRandomProxy(), nil, proxy.Direct)
+		if err != nil {
+			// Invalid proxy
+			warning.Println("Thread", id, "have a problem with proxy")
+		} else {
+			// Proxy good, set transport to http client
+			httpTransport := &http.Transport{}
+			httpClient := &http.Client{Transport: httpTransport}
+			httpTransport.Dial = dialer.Dial
+
+			req, err := http.NewRequest("GET", "http://194.58.115.48/add?lat=45.04280&lon=41.97340&id="+photoID, nil)
+			req.Header.Add("User-Agent", "mozilla")
+			req.Header.Add("Accept-Language", "en-US,en;q=0.5")
+			req.Header.Add("Host", "194.58.115.48")
+			req.Header.Add("Connection", "Keep-Alive")
+			req.Header.Add("Accept-Encoding", "gzip")
 			if err != nil {
-				// Invalid proxy
-				warning.Println("Thread", id, "have a problem with proxy")
-			} else {
-				// Proxy good, set transport to http client
-				httpTransport := &http.Transport{}
-				httpClient := &http.Client{Transport: httpTransport}
-				httpTransport.Dial = dialer.Dial
-
-				req, err := http.NewRequest("GET", "http://194.58.115.48/add?lat=45.04280&lon=41.97340&id="+photoID, nil)
-				req.Header.Add("User-Agent", "mozilla")
-				req.Header.Add("Accept-Language", "en-US,en;q=0.5")
-				req.Header.Add("Host", "194.58.115.48")
-				req.Header.Add("Connection", "Keep-Alive")
-				req.Header.Add("Accept-Encoding", "gzip")
-				if err != nil {
-					warning.Println("Thread", id, "can`t create request")
-				}
-
-				resp, err := httpClient.Do(req)
-				if err != nil {
-					warning.Println("Thread", id, "can`t create request with current proxy in this interation")
-				} else {
-					defer resp.Body.Close()
-				}
+				warning.Println("Thread", id, "can`t create request")
 			}
 
-			time.Sleep(time.Second * time.Duration(threadDelay))
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				warning.Println("Thread", id, "can`t create request with current proxy in this interation")
+			} else {
+				resp.Body.Close()
+			}
 		}
+
+		time.Sleep(time.Second * time.Duration(threadDelay))
 	}
 }
